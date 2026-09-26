@@ -5,7 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.novaself.authproxy.model.GoogleTokenResponse;
 import com.novaself.authproxy.model.UserSession;
-import com.novaself.authproxy.service.CookieUtil;
+import com.novaself.authproxy.service.SessionTokenUtil;
 import com.novaself.authproxy.service.DriveStateService;
 import com.novaself.authproxy.service.GoogleAuthExpiredException;
 import com.novaself.authproxy.service.GoogleOAuthService;
@@ -30,7 +30,7 @@ public class StateController {
     private static final Logger log = LoggerFactory.getLogger(StateController.class);
 
     private final SessionStore sessionStore;
-    private final CookieUtil cookieUtil;
+    private final SessionTokenUtil sessionTokenUtil;
     private final GoogleOAuthService googleOAuthService;
     private final DriveStateService driveStateService;
     private final StateMergeService mergeService;
@@ -39,12 +39,12 @@ public class StateController {
     private final ConcurrentMap<String, Object> userLocks = new ConcurrentHashMap<>();
 
     public StateController(SessionStore sessionStore,
-                            CookieUtil cookieUtil,
+                            SessionTokenUtil sessionTokenUtil,
                             GoogleOAuthService googleOAuthService,
                             DriveStateService driveStateService,
                             StateMergeService mergeService) {
         this.sessionStore = sessionStore;
-        this.cookieUtil = cookieUtil;
+        this.sessionTokenUtil = sessionTokenUtil;
         this.googleOAuthService = googleOAuthService;
         this.driveStateService = driveStateService;
         this.mergeService = mergeService;
@@ -52,7 +52,7 @@ public class StateController {
 
     @GetMapping("/state")
     public ResponseEntity<?> getState(HttpServletRequest request) {
-        String sessionId = cookieUtil.readSessionId(request);
+        String sessionId = sessionTokenUtil.readSessionId(request);
         UserSession session = sessionStore.get(sessionId);
         if (session == null) return unauthorized();
 
@@ -83,7 +83,7 @@ public class StateController {
 
     @PostMapping("/state")
     public ResponseEntity<?> postState(HttpServletRequest request, @RequestBody Map<String, Object> localData) {
-        String sessionId = cookieUtil.readSessionId(request);
+        String sessionId = sessionTokenUtil.readSessionId(request);
         UserSession session = sessionStore.get(sessionId);
         if (session == null) return unauthorized();
 

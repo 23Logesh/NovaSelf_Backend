@@ -13,16 +13,20 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addCorsMappings(CorsRegistry registry) {
+        // allowCredentials is no longer needed (no cookies), but the Authorization
+        // header now has to be explicitly allowed or the browser strips it.
         registry.addMapping("/auth/**")
                 .allowedOrigins(frontendOrigin)
                 .allowedMethods("GET", "POST", "OPTIONS")
-                .allowCredentials(true)
+                .allowedHeaders("Authorization", "Content-Type")
+                .allowCredentials(false)
                 .maxAge(3600);
 
         registry.addMapping("/api/**")
                 .allowedOrigins(frontendOrigin)
                 .allowedMethods("GET", "POST", "OPTIONS")
-                .allowCredentials(true)
+                .allowedHeaders("Authorization", "Content-Type")
+                .allowCredentials(false)
                 .maxAge(3600);
     }
 }
