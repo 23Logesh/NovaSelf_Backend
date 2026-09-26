@@ -12,6 +12,8 @@ import com.novaself.authproxy.service.GoogleOAuthService;
 import com.novaself.authproxy.service.SessionStore;
 import com.novaself.authproxy.service.StateMergeService;
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -21,18 +23,11 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
-/**
- * The backend is now the ONLY thing that talks to Google Drive for user
- * data. The frontend never sees an access token and never calls Google
- * directly — it POSTs its local state here and gets back the merged truth.
- *
- * Reads/writes for a given user are serialized through a per-user lock —
- * that's what actually kills the multi-device race: two saves "at the same
- * time" can no longer both read-then-write blind to each other.
- */
 @RestController
 @RequestMapping("/api")
 public class StateController {
+
+    private static final Logger log = LoggerFactory.getLogger(StateController.class);
 
     private final SessionStore sessionStore;
     private final CookieUtil cookieUtil;
@@ -55,7 +50,6 @@ public class StateController {
         this.mergeService = mergeService;
     }
 
-    /** Used once, right after sign-in: peek at stored state WITHOUT pushing any local data. */
     @GetMapping("/state")
     public ResponseEntity<?> getState(HttpServletRequest request) {
         String sessionId = cookieUtil.readSessionId(request);
@@ -66,8 +60,10 @@ public class StateController {
         try {
             accessToken = resolveAccessToken(sessionId, session);
         } catch (GoogleAuthExpiredException e) {
+            log.warn("[state] GET: access token refresh failed, forcing re-login: {}", e.getMessage());
             return unauthorized();
         } catch (Exception e) {
+            log.error("[state] GET: token resolution threw", e);
             return badGateway();
         }
 
@@ -79,17 +75,12 @@ public class StateController {
                 JsonNode envelope = mapper.readTree(driveStateService.readState(accessToken, ensured.fileId()));
                 return ResponseEntity.ok(responseBody(envelope, ensured.created()));
             } catch (Exception e) {
+                log.error("[state] GET: Drive read/ensure failed", e);
                 return badGateway();
             }
         }
     }
 
-    /**
-     * Called on every autosave and every background sync. Sends the caller's
-     * local (syncable) state; backend merges it with whatever's currently
-     * stored, writes the reconciled result, and returns it so the caller can
-     * adopt it locally too — this is what picks up another device's edits.
-     */
     @PostMapping("/state")
     public ResponseEntity<?> postState(HttpServletRequest request, @RequestBody Map<String, Object> localData) {
         String sessionId = cookieUtil.readSessionId(request);
@@ -100,8 +91,10 @@ public class StateController {
         try {
             accessToken = resolveAccessToken(sessionId, session);
         } catch (GoogleAuthExpiredException e) {
+            log.warn("[state] POST: access token refresh failed, forcing re-login: {}", e.getMessage());
             return unauthorized();
         } catch (Exception e) {
+            log.error("[state] POST: token resolution threw", e);
             return badGateway();
         }
 
@@ -127,6 +120,7 @@ public class StateController {
 
                 return ResponseEntity.ok(responseBody(newEnvelope, ensured.created()));
             } catch (Exception e) {
+                log.error("[state] POST: Drive read/merge/write failed", e);
                 return badGateway();
             }
         }
@@ -140,7 +134,6 @@ public class StateController {
         return body;
     }
 
-    /** Same refresh-if-needed logic as AuthController#token, kept local to avoid touching that endpoint. */
     private String resolveAccessToken(String sessionId, UserSession session) throws Exception {
         if (session.hasValidCachedAccessToken()) return session.getCachedAccessToken();
         GoogleTokenResponse refreshed = googleOAuthService.refreshAccessToken(session.getRefreshToken());

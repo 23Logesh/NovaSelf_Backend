@@ -2,6 +2,8 @@ package com.novaself.authproxy.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
@@ -11,17 +13,10 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 
-/**
- * Stores each user's ENTIRE NovaSelf state as one JSON file
- * ("novaself-state.json") in their own Drive, created under the drive.file
- * scope (app-visible only). Replaces the old multi-tab Sheet — one file is
- * trivial to read/write atomically from the backend and has no per-cell
- * size limit like a Sheets cell does.
- *
- * File contents: {"lastModified": 1730000000000, "data": { ...AppState... }}
- */
 @Service
 public class DriveStateService {
+
+    private static final Logger log = LoggerFactory.getLogger(DriveStateService.class);
 
     private static final String FILE_NAME = "novaself-state.json";
     private static final String DRIVE_FILES_URL = "https://www.googleapis.com/drive/v3/files";
@@ -35,7 +30,6 @@ public class DriveStateService {
     public record EnsureFileResult(String fileId, boolean created) {}
     private record CreateFileMetadata(String name, String mimeType) {}
 
-    /** Finds the user's state file, creating it (empty) if it doesn't exist yet. */
     public EnsureFileResult ensureStateFile(String accessToken) throws Exception {
         String query = "name='" + FILE_NAME + "' and trashed=false and 'me' in owners";
         String url = DRIVE_FILES_URL + "?q=" + urlEncode(query) + "&fields=" + urlEncode("files(id)") + "&spaces=drive";
@@ -60,6 +54,7 @@ public class DriveStateService {
                 HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
         if (response.statusCode() == 401) throw new GoogleAuthExpiredException();
         if (response.statusCode() >= 300) {
+            log.error("[drive] read failed: HTTP {} body={}", response.statusCode(), response.body());
             throw new IllegalStateException("Drive read failed: HTTP " + response.statusCode() + " " + response.body());
         }
         String body = response.body();
@@ -80,6 +75,7 @@ public class DriveStateService {
         HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() == 401) throw new GoogleAuthExpiredException();
         if (response.statusCode() >= 300) {
+            log.error("[drive] write failed: HTTP {} body={}", response.statusCode(), response.body());
             throw new IllegalStateException("Drive write failed: HTTP " + response.statusCode() + " " + response.body());
         }
     }
@@ -88,6 +84,7 @@ public class DriveStateService {
         HttpResponse<String> response = http.send(authedRequest(url, accessToken).GET().build(), HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() == 401) throw new GoogleAuthExpiredException();
         if (response.statusCode() >= 300) {
+            log.error("[drive] GET failed: HTTP {} body={}", response.statusCode(), response.body());
             throw new IllegalStateException("Drive GET failed: HTTP " + response.statusCode() + " " + response.body());
         }
         return mapper.readTree(response.body());
@@ -103,6 +100,7 @@ public class DriveStateService {
         HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() == 401) throw new GoogleAuthExpiredException();
         if (response.statusCode() >= 300) {
+            log.error("[drive] POST failed: HTTP {} body={}", response.statusCode(), response.body());
             throw new IllegalStateException("Drive POST failed: HTTP " + response.statusCode() + " " + response.body());
         }
         return mapper.readTree(response.body());
