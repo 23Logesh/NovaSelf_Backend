@@ -16,6 +16,8 @@ public class UserSession {
     private volatile String cachedAccessToken;
     private volatile long accessTokenExpiresAtEpochMs;
 
+    private volatile String fileId;
+
     public UserSession(String googleUserId, String email, String name, String pictureUrl, String refreshToken) {
         this.googleUserId = googleUserId;
         this.email = email;
@@ -41,4 +43,7 @@ public class UserSession {
         // Refresh 60s early so we never hand out a token that expires mid-request.
         this.accessTokenExpiresAtEpochMs = System.currentTimeMillis() + Math.max(0, (expiresInSeconds - 60)) * 1000L;
     }
+
+    public String getFileId() { return fileId; }
+    public void setFileId(String fileId) { this.fileId = fileId; }
 }

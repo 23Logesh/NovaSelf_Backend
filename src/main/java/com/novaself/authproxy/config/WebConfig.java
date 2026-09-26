@@ -18,5 +18,11 @@ public class WebConfig implements WebMvcConfigurer {
                 .allowedMethods("GET", "POST", "OPTIONS")
                 .allowCredentials(true)
                 .maxAge(3600);
+
+        registry.addMapping("/api/**")
+                .allowedOrigins(frontendOrigin)
+                .allowedMethods("GET", "POST", "OPTIONS")
+                .allowCredentials(true)
+                .maxAge(3600);
     }
 }
